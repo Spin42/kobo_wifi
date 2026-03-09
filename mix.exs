@@ -26,7 +26,6 @@ defmodule KoboWifi.MixProject do
 
   defp deps do
     [
-      {:blob_copy, path: "../../blob_copy"},
       {:kmod_loader, path: "../../kmod_loader"},
       {:muontrap, "~> 1.7"},
       {:vintage_net, "~> 0.13", optional: true},
@@ -43,10 +42,9 @@ defmodule KoboWifi.MixProject do
   end
 
   defp description do
-    "Initializes WiFi hardware on Kobo e-readers by extracting proprietary " <>
-      "firmware and WMT binaries from stock Kobo system partitions, loading " <>
-      "MediaTek connectivity kernel modules, and starting the WMT stack " <>
-      "so that wlan0 is available for VintageNet."
+    "Initializes WiFi hardware on Kobo e-readers by loading MediaTek " <>
+      "connectivity kernel modules and starting the WMT stack so that " <>
+      "wlan0 is available for VintageNet."
   end
 
   defp package do
