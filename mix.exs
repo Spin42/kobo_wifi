@@ -20,7 +20,15 @@ defmodule KoboWifi.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {KoboWifi.Application, []}
+      mod: {KoboWifi.Application, []},
+      env: [
+        module_dir: "/drivers/mt8113t-ntx/mt66xx",
+        firmware_dir: "/lib/firmware",
+        system_firmware_dir: "/system/etc/firmware",
+        device_wait_timeout: 10,
+        wifi_enable_delay: 2_000,
+        interface_name: "wlan0"
+      ]
     ]
   end
 
