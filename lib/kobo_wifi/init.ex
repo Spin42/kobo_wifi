@@ -1,20 +1,22 @@
 defmodule KoboWifi.Init do
   @moduledoc """
-  GenServer that manages the WiFi firmware extraction lifecycle.
+  GenServer that manages the WiFi initialization lifecycle.
 
-  On startup, extracts proprietary firmware and WMT binaries from the stock
-  Kobo partition (first boot only). This must complete before VintageNet
-  starts, so `kobo_wifi` should be in the shoehorn boot order before
-  `nerves_pack`.
+  On startup, immediately transitions to `:ready`. Proprietary firmware
+  and WMT binaries are expected to already be present on the filesystem —
+  they are extracted at build time by `kobo_firmware` during the one-time
+  `mix kobo.setup` step.
+
+  This must be started before VintageNet, so `kobo_wifi` should be in
+  the shoehorn boot order before `nerves_pack`.
 
   The hardware initialization (kernel modules, WMT stack) is handled
   separately by `KoboWifi.PowerManager` when VintageNet requests it.
 
-  Subscribers receive messages as firmware extraction progresses:
+  Subscribers receive messages as state transitions happen:
 
       KoboWifi.subscribe()
       # receive do
-      #   {:kobo_wifi, :firmware_copied} -> ...
       #   {:kobo_wifi, :ready} -> ...
       #   {:kobo_wifi, {:error, reason}} -> ...
       # end
@@ -24,7 +26,7 @@ defmodule KoboWifi.Init do
 
   require Logger
 
-  @type status :: :initializing | :copying_firmware | :ready | {:error, term()}
+  @type status :: :initializing | :ready | {:error, term()}
 
   # -- Client API --
 
@@ -33,7 +35,7 @@ defmodule KoboWifi.Init do
   end
 
   @doc """
-  Returns the current firmware extraction status.
+  Returns the current initialization status.
   """
   @spec status() :: status()
   def status do
@@ -41,9 +43,9 @@ defmodule KoboWifi.Init do
   end
 
   @doc """
-  Blocks until firmware extraction is complete or the timeout expires.
+  Blocks until initialization is complete or the timeout expires.
 
-  Returns `:ok` if firmware is ready, or `{:error, reason}` if extraction
+  Returns `:ok` if ready, or `{:error, reason}` if initialization
   failed or timed out. This is used by `KoboWifi.PowerManager` to ensure
   firmware is available before attempting hardware initialization.
   """
@@ -58,7 +60,7 @@ defmodule KoboWifi.Init do
 
       _in_progress ->
         # Subscribe, then check status again to avoid a race where
-        # extraction completes between the status check and subscribe.
+        # initialization completes between the status check and subscribe.
         subscribe()
 
         try do
@@ -82,26 +84,24 @@ defmodule KoboWifi.Init do
         error
 
       {:kobo_wifi, _other} ->
-        # Intermediate event (e.g. :copying_firmware, :firmware_copied), keep waiting
+        # Intermediate event, keep waiting
         await_ready(timeout)
     after
       timeout ->
-        {:error, :firmware_wait_timeout}
+        {:error, :init_wait_timeout}
     end
   end
 
   @doc """
-  Subscribes the calling process to firmware extraction events.
+  Subscribes the calling process to initialization events.
 
   The subscriber will receive messages of the form `{:kobo_wifi, event}` where
   event is one of:
 
-  - `:copying_firmware` - firmware extraction from stock partition has started
-  - `:firmware_copied` - firmware extraction completed successfully
-  - `:ready` - firmware is available (either freshly copied or already present)
-  - `{:error, reason}` - firmware extraction failed
+  - `:ready` - firmware is available, hardware can be initialized
+  - `{:error, reason}` - initialization failed
 
-  If extraction has already completed (or failed) by the time `subscribe/0`
+  If initialization has already completed (or failed) by the time `subscribe/0`
   is called, the subscriber immediately receives the current state.
   """
   @spec subscribe() :: :ok
@@ -110,7 +110,7 @@ defmodule KoboWifi.Init do
   end
 
   @doc """
-  Unsubscribes the calling process from firmware extraction events.
+  Unsubscribes the calling process from initialization events.
   """
   @spec unsubscribe() :: :ok
   def unsubscribe do
@@ -161,27 +161,9 @@ defmodule KoboWifi.Init do
   # -- Private --
 
   defp do_initialize(subscribers) do
-    Logger.info("[KoboWifi] Starting WiFi firmware extraction...")
-
-    broadcast(subscribers, :copying_firmware)
-
-    case BlobCopy.ensure_copied(blob_copy_config()) do
-      :ok ->
-        broadcast(subscribers, :firmware_copied)
-        broadcast(subscribers, :ready)
-        Logger.info("[KoboWifi] WiFi firmware is available")
-        :ready
-
-      {:error, reason} = error ->
-        broadcast(subscribers, error)
-        Logger.error("[KoboWifi] Firmware extraction failed: #{inspect(reason)}")
-        error
-    end
-  end
-
-  defp blob_copy_config do
-    Application.fetch_env!(:kobo_wifi, :blob_copy)
-    |> BlobCopy.Config.new!()
+    Logger.info("[KoboWifi] WiFi firmware is available")
+    broadcast(subscribers, :ready)
+    :ready
   end
 
   defp broadcast(subscribers, event) do
