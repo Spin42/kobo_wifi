@@ -34,7 +34,7 @@ defmodule KoboWifi.MixProject do
 
   defp deps do
     [
-      {:kmod_loader, path: "../../kmod_loader"},
+      {:kmod_loader, github: "Spin42/kmod_loader"},
       {:muontrap, "~> 1.7"},
       {:vintage_net, "~> 0.13", optional: true},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false}
